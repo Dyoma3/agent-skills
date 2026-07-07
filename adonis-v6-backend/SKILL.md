@@ -5,8 +5,25 @@ description: "Use for all work in an AdonisJS v6 TypeScript backend: implementat
 
 # Adonis v6 Backend
 
-Use this skill as the generic AdonisJS v6 backend context. Repo-local instructions, domain
-invariants, and contracts still apply and override this skill when they are more specific.
+Use this skill as the generic AdonisJS v6 backend context.
+
+## Stack
+
+- AdonisJS v6
+- TypeScript
+- PostgreSQL
+- Lucid ORM
+- Redis
+- BullMQ
+- Zod
+
+## Commands
+
+- `npm run dev`: start the backend development server, commonly on port `3333`
+- `npm run test`: run the test suite
+- `npm run format`: apply formatting after edits
+- `node ace migration:run`: run database migrations
+- `node ace make:migration <name>`: create a new database migration
 
 ## Core Rules
 
