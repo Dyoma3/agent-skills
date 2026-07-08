@@ -83,7 +83,7 @@ evolve safely.
 
 - Do not introduce Vine.js validators.
 - Do not accept loosely typed payloads when a Zod schema should define the contract.
-- Do not duplicate shared coercion logic for amounts, ids, or domain identifiers instead of reusing
+- Do not duplicate shared coercion logic for numbers, ids, or domain identifiers instead of reusing
   shared schemas.
 - Do not rely on implicit casting when request validation should make the transformation explicit.
 - Do not use object-level `.transform()` only to convert missing fields to `null` or apply simple
@@ -110,7 +110,6 @@ evolve safely.
 ## Database and Migrations
 
 - Do not add tables or relationships without checking how they fit the existing domain model.
-- Do not store financial amounts as floating-point values.
 - Do not create migrations that omit important foreign-key behavior without a clear reason.
 - Do not encode business rules only in migrations when they also need application-level validation.
 

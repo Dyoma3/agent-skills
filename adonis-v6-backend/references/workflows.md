@@ -26,7 +26,7 @@ Step-by-step guides for common Adonis backend development tasks.
        router.post('', [MyController, 'store'])
      })
      .prefix('my-resource')
-     .use([middleware.auth(), middleware.hasCompany()])
+     .use([middleware.auth()])
    ```
 
 2. **Create controller** in `app/controllers/`:
@@ -34,15 +34,13 @@ Step-by-step guides for common Adonis backend development tasks.
    ```typescript
    export default class MyController {
      async index({ auth }: HttpContext) {
-       const company = auth.user!.currentCompany
-       return await company.related('myResources').query()
+       return await MyResource.query().where('userId', auth.user!.id)
      }
 
      async store({ request, auth, bouncer }: HttpContext) {
        const data = validateRequest(storeValidator, request.body())
-       const company = auth.user!.currentCompany
-       await bouncer.with(MyResourcePolicy).authorize('store', company)
-       return await company.related('myResources').create(data)
+       await bouncer.with(MyResourcePolicy).authorize('store')
+       return await MyResource.create({ ...data, userId: auth.user!.id })
      }
    }
    ```
@@ -82,11 +80,11 @@ Step-by-step guides for common Adonis backend development tasks.
    Example:
 
    ```typescript
-   async show({ response, company, params, bouncer }: HttpContext) {
-     const project = await Project.findOrFail(params.id)
-     await bouncer.with(ProjectPolicy).authorize('show', project, company!)
+   async show({ response, params, bouncer }: HttpContext) {
+     const resource = await MyResource.findOrFail(params.id)
+     await bouncer.with(MyResourcePolicy).authorize('show', resource)
 
-     return response.status(200).json(project)
+     return response.status(200).json(resource)
    }
    ```
 
@@ -95,11 +93,11 @@ Step-by-step guides for common Adonis backend development tasks.
    ```typescript
    export const storeValidator = z.object({
      name: z.string().min(1),
-     amount: financialAmountSchema,
+     quantity: z.coerce.number().int().min(0),
    })
    ```
 
-4. **Add middleware** as needed, such as auth, company context, admin auth, or worker auth.
+4. **Add middleware** as needed, such as auth, role checks, or repo-specific scoping middleware.
 
 ## Add MCP Tool Reusing An Adonis Service
 
@@ -176,13 +174,13 @@ Step-by-step guides for common Adonis backend development tasks.
 1. **Load the scoped resource**:
 
    ```typescript
-   const project = await Project.findOrFail(params.id)
+   const resource = await Resource.findOrFail(params.id)
    ```
 
 2. **Authorize with Bouncer** using an existing policy and ability name when possible:
 
    ```typescript
-   await bouncer.with(ProjectPolicy).authorize('show', project, company!)
+   await bouncer.with(ResourcePolicy).authorize('show', resource)
    ```
 
 3. **Only add a new ability** when no existing ability name fits the action.
@@ -207,11 +205,9 @@ Step-by-step guides for common Adonis backend development tasks.
      async up() {
        this.schema.createTable(this.tableName, (table) => {
          table.increments('id')
-         table.integer('company_id').unsigned().references('companies.id').onDelete('CASCADE')
-         table.string('name').notNullable()
-         table.bigInteger('amount').notNullable()
-         table.timestamp('created_at')
-         table.timestamp('updated_at')
+        table.string('name').notNullable()
+        table.timestamp('created_at')
+        table.timestamp('updated_at')
        })
      }
 
@@ -237,13 +233,13 @@ Step-by-step guides for common Adonis backend development tasks.
      declare id: number
 
      @column()
-     declare companyId: number
+     declare userId: number
 
      @column()
      declare name: string
 
      @column()
-     declare amount: number
+     declare quantity: number
 
      @column.dateTime({ autoCreate: true })
      declare createdAt: DateTime
@@ -251,8 +247,8 @@ Step-by-step guides for common Adonis backend development tasks.
      @column.dateTime({ autoCreate: true, autoUpdate: true })
      declare updatedAt: DateTime
 
-     @belongsTo(() => Company)
-     declare company: BelongsTo<typeof Company>
+     @belongsTo(() => User)
+     declare user: BelongsTo<typeof User>
    }
    ```
 
@@ -277,7 +273,7 @@ Step-by-step guides for common Adonis backend development tasks.
    await syncQueue.add(
      'job-name',
      {
-       companyId: company.id,
+       resourceId: resource.id,
        date: '2025-01',
      },
      {
@@ -326,20 +322,20 @@ Step-by-step guides for common Adonis backend development tasks.
 
 ```typescript
 // In parent
-@hasMany(() => Payment)
-declare payments: HasMany<typeof Payment>
+@hasMany(() => Resource)
+declare resources: HasMany<typeof Resource>
 
 // In child
-@belongsTo(() => Company)
-declare company: BelongsTo<typeof Company>
+@belongsTo(() => User)
+declare user: BelongsTo<typeof User>
 ```
 
 ### ManyToMany
 
 ```typescript
 // In both models
-@manyToMany(() => Item, { pivotTable: 'items_payments' })
-declare items: ManyToMany<typeof Item>
+@manyToMany(() => Tag, { pivotTable: 'resource_tags' })
+declare tags: ManyToMany<typeof Tag>
 ```
 
 ## Add Custom Middleware
@@ -383,12 +379,12 @@ import MyResource from '#models/my_resource'
 
 export default Factory.define(MyResource, ({ faker }) => ({
   name: faker.commerce.productName(),
-  amount: faker.number.int({ min: 1000, max: 100000 }),
+  quantity: faker.number.int({ min: 1, max: 100 }),
 })).build()
 ```
 
 Use in tests:
 
 ```typescript
-const resource = await MyResourceFactory.merge({ companyId: company.id }).create()
+const resource = await MyResourceFactory.merge({ userId: user.id }).create()
 ```

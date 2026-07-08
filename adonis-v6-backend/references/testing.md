@@ -20,7 +20,7 @@ npm run test                    # Run all tests
 node ace test functional        # Functional tests only
 node ace test mcp               # MCP protocol/tool tests only
 node ace test unit              # Unit tests only
-node ace test --files "tests/functional/payments.spec.ts"  # Single file
+node ace test --files "tests/functional/resources.spec.ts"  # Single file
 node ace test --groups "Group name" # Group test
 node ace test --tests "Test name" # Single test
 ```
@@ -30,12 +30,12 @@ node ace test --tests "Test name" # Single test
 ```bash
 tests/
 ├── functional/     # API integration tests
-│   ├── payments.spec.ts
-│   ├── invoices.spec.ts
+│   ├── resources.spec.ts
+│   ├── users.spec.ts
 │   └── ...
 ├── mcp/            # MCP protocol and tool integration tests
 │   ├── tools/
-│   ├── projects/
+│   ├── resources/
 │   └── ...
 ├── unit/           # Unit tests
 │   └── ...
@@ -51,13 +51,13 @@ domain-oriented, similar to the functional suite:
 tests/mcp/
 ├── auth/
 ├── tools/
-├── projects/
-└── companies/
+├── resources/
+└── users/
 ```
 
 `tests/mcp/tools` is for generic MCP tool registry requests such as `tools/list`. Put individual
 tool behavior under the domain folder that owns the tool, for example
-`tests/mcp/projects/get_projects.spec.ts`.
+`tests/mcp/resources/get_resources.spec.ts`.
 
 MCP tests still use the HTTP test client when the MCP server is exposed through `/mcp`, but they
 should assert MCP protocol results: JSON-RPC envelopes, SSE data events, `structuredContent`, and
@@ -75,51 +75,42 @@ Most files use `group.setup` to reset once and create shared fixtures for the wh
 import { test } from '@japa/runner'
 import ace from '@adonisjs/core/services/ace'
 import { UserFactory } from '#database/factories/user_factory'
-import { CompanyFactory } from '#database/factories/company_factory'
-import { PaymentTypes } from '#types/index'
 import User from '#models/user'
-import Company from '#models/company'
+import Resource from '#models/resource'
+import { ResourceFactory } from '#database/factories/resource_factory'
 
 let user: User
-let company: Company
 
-test.group('Payments create', async (group) => {
+test.group('Resources create', async (group) => {
   group.setup(async () => {
-    await ace.exec('db:mytruncate', [])
+    await ace.exec('db:truncate', [])
     user = await UserFactory.create()
-    company = await CompanyFactory.create()
-    await company.addUser(user.id)
   })
 
   const payload = {
-    projectId: null,
-    amount: 1000,
+    name: 'Example resource',
+    quantity: 10,
     date: '2021-01-01',
-    type: PaymentTypes.Income,
-    hasIva: false,
-    isFictional: false,
-    balanceAtPayment: 5000,
   }
 
-  test('creates a payment', async ({ assert, client }) => {
-    const response = await client.post('/payments').json(payload).loginAs(user)
+  test('creates a resource', async ({ assert, client }) => {
+    const response = await client.post('/resources').json(payload).loginAs(user)
 
     response.assertStatus(201)
     assert.isNumber(response.body().id)
-    assert.containsSubset(response.body(), { ...payload, companyId: company.id })
+    assert.containsSubset(response.body(), { ...payload, userId: user.id })
   })
 
-  test('requires company membership', async ({ client }) => {
-    const newUser = await UserFactory.create()
-    const response = await client.post('/payments').json(payload).loginAs(newUser)
+  test('requires authentication', async ({ client }) => {
+    const response = await client.post('/resources').json(payload)
 
-    response.assertStatus(403)
+    response.assertStatus(401)
   })
 
   test('rejects invalid payloads', async ({ client }) => {
     const response = await client
-      .post('/payments')
-      .json({ ...payload, amount: 'invalid' })
+      .post('/resources')
+      .json({ ...payload, quantity: 'invalid' })
       .loginAs(user)
 
     response.assertStatus(422)
@@ -130,7 +121,7 @@ test.group('Payments create', async (group) => {
 ## Testing HTTP Action Services
 
 HTTP action services that inject `HttpContext` are usually best covered through functional tests for
-the endpoint, because validation, middleware, auth/company context, and response serialization are
+the endpoint, because validation, middleware, auth/request context, and response serialization are
 part of the behavior.
 
 When testing an action service directly, create or bind the request-specific dependencies through
@@ -141,12 +132,12 @@ surface is very small.
 Example of per-test reset when each test mutates shared state heavily:
 
 ```typescript
-test.group('Project.getReadyItems', (group) => {
+test.group('Resource.getReadyRecords', (group) => {
   group.each.setup(async () => {
-    await ace.exec('db:mytruncate', [])
+    await ace.exec('db:truncate', [])
   })
 
-  test('returns unique ready items belonging to the project', async ({ assert }) => {
+  test('returns unique ready records belonging to the resource', async ({ assert }) => {
     // create data specific to this test
   })
 })
@@ -158,17 +149,17 @@ Factories are in `database/factories/`:
 
 ```typescript
 // Create single record
-const payment = await PaymentFactory.create()
+const resource = await ResourceFactory.create()
 
 // Create with specific values
-const payment = await PaymentFactory.merge({ companyId: company.id, amount: 50000 }).create()
+const resource = await ResourceFactory.merge({ userId: user.id, quantity: 50 }).create()
 
 // Create multiple
-const payments = await PaymentFactory.merge({ companyId: company.id }).createMany(5)
+const resources = await ResourceFactory.merge({ userId: user.id }).createMany(5)
 
 // With relationships
-const user = await UserFactory.with('company')
-  .with('payments', 3)
+const user = await UserFactory
+  .with('resources', 3)
   .create()
 ```
 
@@ -182,7 +173,7 @@ response.assertStatus(404)
 
 // Body content
 response.assertBodyContains({ id: 1 })
-response.assertBodyContains({ amount: 10000 })
+response.assertBodyContains({ quantity: 10 })
 
 // Array length
 response.assertBodyContains({ length: 3 })
@@ -190,7 +181,7 @@ response.assertBodyContains({ length: 3 })
 // Specific structure
 response.assertBody({
   id: 1,
-  amount: 10000,
+  quantity: 10,
   date: '2025-01-15',
 })
 ```
@@ -199,43 +190,37 @@ response.assertBody({
 
 ```typescript
 // Login as user
-const response = await client.get('/payments').loginAs(user)
+const response = await client.get('/resources').loginAs(user)
 
 // Admin routes
 const admin = await UserFactory.create()
 const response = await client.get('/admin/users').loginAs(admin)
 
-// Worker auth
+// Token-protected internal route
 const response = await client
-  .post('/payments/worker-batch')
-  .header('Authorization', `Bearer ${process.env.WORKER_SECRET}`)
+  .post('/resources/internal-batch')
+  .header('Authorization', `Bearer ${process.env.INTERNAL_API_TOKEN}`)
   .json(data)
 ```
 
 ## Database Assertions
 
 ```typescript
-import Payment from '#models/payment'
+import Resource from '#models/resource'
 
-test('creates payment in database', async ({ client, assert }) => {
+test('creates resource in database', async ({ client, assert }) => {
   const user = await UserFactory.create()
-  const company = await CompanyFactory.create()
-  await company.addUser(user.id)
 
-  await client.post('/payments').loginAs(user).json({
-    projectId: null,
-    amount: 10000,
+  await client.post('/resources').loginAs(user).json({
+    name: 'Example resource',
+    quantity: 10,
     date: '2025-01-15',
-    type: PaymentTypes.Income,
-    hasIva: false,
-    isFictional: false,
-    balanceAtPayment: 5000,
   })
 
-  const payment = await Payment.query().where('companyId', company.id).first()
+  const resource = await Resource.query().where('userId', user.id).first()
 
-  assert.isNotNull(payment)
-  assert.equal(payment!.amount, 10000)
+  assert.isNotNull(resource)
+  assert.equal(resource!.quantity, 10)
 })
 ```
 
@@ -245,20 +230,17 @@ Example factory in `database/factories/`:
 
 ```typescript
 import Factory from '@adonisjs/lucid/factories'
-import Payment from '#models/payment'
-import { CompanyFactory } from '#database/factories/company_factory'
-import { ItemFactory } from '#database/factories/item_factory'
-import { PaymentTypes } from '#types/index'
+import Resource from '#models/resource'
+import { UserFactory } from '#database/factories/user_factory'
+import { TagFactory } from '#database/factories/tag_factory'
 
-export default Factory.define(Payment, ({ faker }) => ({
-  amount: faker.number.int({ min: 1000, max: 1000000 }),
+export default Factory.define(Resource, ({ faker }) => ({
+  name: faker.commerce.productName(),
+  quantity: faker.number.int({ min: 1, max: 100 }),
   date: faker.date.recent().toISOString().split('T')[0],
-  type: faker.helpers.enumValue(PaymentTypes),
-  hasIva: faker.datatype.boolean(),
-  isFictional: false,
   description: faker.commerce.productDescription(),
 }))
-  .relation('company', () => CompanyFactory)
-  .relation('items', () => ItemFactory)
+  .relation('user', () => UserFactory)
+  .relation('tags', () => TagFactory)
   .build()
 ```

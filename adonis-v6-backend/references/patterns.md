@@ -19,19 +19,19 @@
 
 | Element               | Style      | Example                             |
 | --------------------- | ---------- | ----------------------------------- |
-| Files                 | snake_case | `payment_states_controller.ts`      |
-| Classes               | PascalCase | `PaymentStatesController`           |
-| Database columns      | snake_case | `company_id`, `created_at`          |
-| TypeScript properties | camelCase  | `companyId`, `createdAt`            |
-| Routes                | kebab-case | `/payment-states`, `/bank-accounts` |
+| Files                 | snake_case | `resource_states_controller.ts`     |
+| Classes               | PascalCase | `ResourceStatesController`          |
+| Database columns      | snake_case | `owner_id`, `created_at`            |
+| TypeScript properties | camelCase  | `ownerId`, `createdAt`              |
+| Routes                | kebab-case | `/resource-states`, `/api-tokens`    |
 
 ## Imports
 
 Use AdonisJS path aliases:
 
 ```typescript
-import Company from '#models/company'
-import { storeValidator } from '#validators/payment'
+import Resource from '#models/resource'
+import { storeValidator } from '#validators/resource'
 import syncQueue from '#lib/queues/sync'
 import env from '#start/env'
 import redisConfig from '#config/redis'
@@ -42,12 +42,11 @@ import redisConfig from '#config/redis'
 Controllers are thin: validate input, delegate to services or models:
 
 ```typescript
-export default class PaymentsController {
+export default class ResourcesController {
   async store({ request, auth, bouncer }: HttpContext) {
     const data = validateRequest(storeValidator, request.body())
-    const company = auth.user!.currentCompany
-    await bouncer.with(PaymentPolicy).authorize('store', company)
-    return await company.related('payments').create(data)
+    await bouncer.with(ResourcePolicy).authorize('store')
+    return await Resource.create({ ...data, userId: auth.user!.id })
   }
 }
 ```
@@ -77,18 +76,18 @@ Policy ability names should match the repo's resource-action conventions:
 Example:
 
 ```typescript
-async show({ response, company, params, bouncer }: HttpContext) {
-  const project = await Project.findOrFail(params.id)
-  await bouncer.with(ProjectPolicy).authorize('show', project, company!)
+async show({ response, params, bouncer }: HttpContext) {
+  const resource = await Resource.findOrFail(params.id)
+  await bouncer.with(ResourcePolicy).authorize('show', resource)
 
-  return response.status(200).json(project)
+  return response.status(200).json(resource)
 }
 ```
 
 Routes use lazy imports:
 
 ```typescript
-const PaymentsController = () => import('#controllers/payments_controller')
+const ResourcesController = () => import('#controllers/resources_controller')
 ```
 
 ## Models
@@ -96,30 +95,30 @@ const PaymentsController = () => import('#controllers/payments_controller')
 Lucid models use `declare` for columns:
 
 ```typescript
-export default class Payment extends BaseModel {
+export default class Resource extends BaseModel {
   @column({ isPrimary: true })
   declare id: number
 
   @column()
-  declare amount: number
+  declare quantity: number
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
-  @belongsTo(() => Company)
-  declare company: BelongsTo<typeof Company>
+  @column()
+  declare userId: number
 
-  @manyToMany(() => Item, { pivotTable: 'items_payments' })
-  declare items: ManyToMany<typeof Item>
+  @belongsTo(() => User)
+  declare user: BelongsTo<typeof User>
 
   @beforeSave()
-  static async validate(payment: Payment) {
+  static async validate(resource: Resource) {
     // validation logic
   }
 
   @computed()
-  get formattedAmount() {
-    return this.amount.toLocaleString('es-CL')
+  get displayName() {
+    return `Resource #${this.id}`
   }
 }
 ```
@@ -130,14 +129,13 @@ Use Zod schemas, not Vine.js:
 
 ```typescript
 import { z } from 'zod'
-import { financialAmountSchema, taxIdSchema } from '#lib/schemas'
+import { intStringSchema } from '#lib/schemas'
 
 export const storeValidator = z.object({
-  amount: financialAmountSchema.pipe(z.number().min(0)),
+  quantity: z.coerce.number().int().min(0),
   date: z.string().min(1),
-  type: z.nativeEnum(PaymentTypes),
-  hasIva: z.boolean(),
-  issuerTaxId: taxIdSchema.nullable().optional(),
+  status: z.enum(['draft', 'active']),
+  ownerId: intStringSchema.optional(),
 })
 ```
 
@@ -152,9 +150,9 @@ Validator conventions:
 
 Common schema patterns:
 
-- amount schemas that accept string and number input
+- numeric schemas that accept the input shapes used by the repo
 - id schemas that coerce string query params to integers
-- domain identifier schemas such as tax IDs when the repo uses them
+- domain identifier schemas when the repo uses them
 
 ## Services
 
@@ -177,40 +175,40 @@ through composition. They are typically:
 - Independent from `HttpContext`
 
 ```typescript
-// app/services/project/clone.ts
-export default class ProjectCloneService {
-  constructor(private project: Project) {}
+// app/services/resource/duplicate.ts
+export default class ResourceDuplicateService {
+  constructor(private resource: Resource) {}
 
   async execute(name: string) {
-    // Complex cloning logic with transactions
+    // Complex duplication logic with transactions
   }
 }
 
 // Called from model method:
-// app/models/project.ts
-async clone(name: string) {
-  const projectCloneService = new ProjectCloneService(this)
-  return await projectCloneService.execute(name)
+// app/models/resource.ts
+async duplicate(name: string) {
+  const service = new ResourceDuplicateService(this)
+  return await service.execute(name)
 }
 ```
 
 Domain services can also have static methods for aggregation:
 
 ```typescript
-// app/services/item_period_stats.ts
-export default class ItemPeriodStatsService {
+// app/services/resource_period_stats.ts
+export default class ResourcePeriodStatsService {
   constructor(
-    private item: Item,
+    private resource: Resource,
     private startDate: string,
     private endDate: string
   ) {}
 
-  async getStats(options: AmountUnitOptions = {}) {
+  async getStats(options: StatsOptions = {}) {
     /* ... */
   }
 
   static aggregateStats(stats: Stats[]) {
-    // Aggregate multiple item stats
+    // Aggregate multiple resource stats
   }
 }
 ```
@@ -296,11 +294,11 @@ Placement rule:
 
 Examples:
 
-- Good: `app/services/project/clone.ts` used by `Project.clone()`
-- Good: `app/services/project/ifc_recommendation.ts` used by a project model workflow
+- Good: `app/services/resource/duplicate.ts` used by `Resource.duplicate()`
+- Good: `app/services/resource/recalculate.ts` used by a resource model workflow
 - Good: `app/services/oauth/approve_authorization.ts` used by one large HTTP action through Adonis
   method injection
-- Bad: an eval runner under `app/services/project/*` when it only exists to support an Ace command
+- Bad: an eval runner under `app/services/resource/*` when it only exists to support an Ace command
 
 ### Services Shared By HTTP And Other Transports
 
@@ -510,10 +508,10 @@ await syncQueue.add('sync', payload, {
 Custom middleware in `app/middleware/`:
 
 ```typescript
-export default class HasCompanyMiddleware {
+export default class EnsureProfileMiddleware {
   async handle({ auth, response }: HttpContext, next: NextFn) {
-    if (!auth.user?.currentCompany) {
-      return response.unauthorized({ message: 'No company selected' })
+    if (!auth.user?.profile) {
+      return response.unauthorized({ message: 'Profile required' })
     }
     return next()
   }
@@ -525,7 +523,7 @@ Register in `start/kernel.ts`:
 ```typescript
 export const middleware = router.named({
   auth: () => import('#middleware/auth_middleware'),
-  hasCompany: () => import('#middleware/has_company_middleware'),
+  ensureProfile: () => import('#middleware/ensure_profile_middleware'),
 })
 ```
 
@@ -542,7 +540,7 @@ router
     router.delete(':id', [Controller, 'destroy'])
   })
   .prefix('resource-name')
-  .use([middleware.auth(), middleware.hasCompany()])
+  .use([middleware.auth(), middleware.ensureProfile()])
 ```
 
 Worker routes use worker-auth middleware when the repo has worker callbacks.
@@ -554,23 +552,6 @@ When adding a new user-authenticated route:
 - confirm the policy ability name matches the existing repo convention before adding a new one
 
 ## Data Conventions
-
-### Financial Amounts
-
-- Store as integers in the database.
-- Use the repo's shared amount schema for input validation.
-- If the repo has a money column decorator, use it for price or amount model columns so consume and
-  serialize behavior stays consistent.
-
-```typescript
-import { moneyColumn } from '#lib/decorators/money_column'
-
-@moneyColumn()
-declare price: number
-
-@moneyColumn({ nullable: true })
-declare optionalPrice: number | null
-```
 
 ### Dates
 
