@@ -130,7 +130,9 @@ Step-by-step guides for common Adonis backend development tasks.
    ```
 
    `execute(input)` is the shared path. It may validate, authorize, use middleware-provided request
-   context, and query models. It should return plain data.
+   context, and query models. It should return plain data. For model-backed records, prefer Lucid
+   `serialize()` output over hand-written DTOs. Do not add `dto.ts` or serializer helper files under
+   `app/services` just to satisfy an MCP output schema.
 
 2. **Delegate the HTTP controller** through Adonis method injection:
 

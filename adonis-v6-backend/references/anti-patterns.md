@@ -57,6 +57,16 @@ evolve safely.
   `httpExecute()`.
 - Do not make controllers extract request input and pass it into an HTTP action service that
   already owns the request workflow. Let the service's HTTP wrapper read `ctx.request`.
+- Do not create `dto.ts`, `serializer.ts`, `serialize_*`, or `to*Dto` files under `app/services`
+  that merely copy fields from a Lucid model. Models already own their public serialization through
+  `model.serialize()`, collection serialization, computed properties, and column serializers.
+- Do not manually rebuild a model response field-by-field unless the endpoint intentionally owns a
+  different contract. If a service needs to add workflow-specific fields or omit an internal
+  preloaded relation, keep that small shaping local to the workflow and start from
+  `model.serialize()`.
+- Do not put MCP-only output DTOs in `app/services`. MCP contracts belong in `app/mcp/tools`
+  schemas; services should return domain data or serialized model data, not transport-only helper
+  shapes.
 
 ## MCP Tools
 
@@ -78,6 +88,9 @@ evolve safely.
   accidentally.
 - Do not use `.passthrough()` for MCP output schemas unless the tool contract explicitly allows
   arbitrary extension fields.
+- Do not satisfy a strict MCP schema by creating a service-layer DTO helper that mirrors a model.
+  Update the MCP schema to match the intentional serialized model contract, or perform a small
+  transport-local projection when the tool deliberately exposes a subset.
 
 ## Validation and Schemas
 

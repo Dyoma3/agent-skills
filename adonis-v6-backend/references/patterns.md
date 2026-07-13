@@ -300,6 +300,23 @@ Examples:
   method injection
 - Bad: an eval runner under `app/services/resource/*` when it only exists to support an Ace command
 
+### Serialization And Response Shaping
+
+Lucid models own model serialization. For CRUD-style services and endpoints, return
+`model.serialize()`, `models.map((model) => model.serialize())`, or paginator/collection
+`.serialize()` instead of hand-written DTO objects.
+
+When a workflow needs extra response data, start from model serialization and add only the extra
+fields. When a workflow preloads an internal relation only to compute a response value, omit that
+relation locally rather than introducing a generic serializer helper.
+
+Keep transport contracts separate from model serialization:
+
+- MCP output schemas live under `app/mcp/tools`.
+- HTTP response wrappers live in controllers or HTTP action service `httpExecute()` methods.
+- Do not add service-layer DTO/serializer files just to make TypeScript or Zod schemas line up with
+  a model-backed response.
+
 ### Services Shared By HTTP And Other Transports
 
 When an Adonis request workflow must be reused by another transport, keep the service as the shared
@@ -455,11 +472,12 @@ callback inline inside the returned object.
 
 Use `z.strictObject(...)` for MCP output schemas and parse the returned data before assigning
 `structuredContent`. MCP outputs are contracts, not loose mirrors of Lucid models. Strict schemas
-make drift visible: if a model starts serializing a new field and the tool returns raw serialized
-models, the tool test fails until the MCP output contract is intentionally updated. If the tool
-should expose only a stable subset, map the service result to a DTO first, then strict-parse that
-DTO. Do not rely on default `z.object(...)` behavior for output parsing, because it strips
-undeclared serialized fields and can hide contract drift.
+make drift visible: if a model starts serializing a new field and the tool returns serialized model
+data, the tool test fails until the MCP output contract is intentionally updated. If the tool should
+expose only a stable subset, project the subset locally in the tool callback or in the workflow that
+owns that response shape. Do not create service-layer DTO/serializer helpers that simply mirror a
+Lucid model, and do not rely on default `z.object(...)` behavior for output parsing because it
+strips undeclared serialized fields and can hide contract drift.
 
 Register tools from the MCP handler by keeping a list of tool objects and iterating over it:
 

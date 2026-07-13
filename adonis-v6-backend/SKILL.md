@@ -41,6 +41,8 @@ Use this skill as the generic AdonisJS v6 backend context.
 - When an Adonis HTTP workflow is reused by MCP, jobs, commands, or another transport, split the
   service into an HTTP adapter such as `httpExecute()` and a transport-neutral `execute(input)`
   method that returns plain data.
+- For model-backed records, use Lucid model, collection, and paginator `.serialize()` output.
+  Do not create DTO or serializer helpers that merely repeat model fields.
 - Keep MCP tool definitions under `app/mcp`, not under `app/services`, and expose existing Adonis
   services instead of duplicating controller logic.
 - Add or update tests when changing validation, business behavior, response shapes, authorization,
