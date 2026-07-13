@@ -125,7 +125,9 @@ export default class Resource extends BaseModel {
 
 ## Validators
 
-Use Zod schemas, not Vine.js:
+Use Zod schemas, not Vine.js. Validators under `app/validators` define external input contracts:
+HTTP request bodies, query strings, route params when validated as input, and transport payloads
+such as MCP tool arguments.
 
 ```typescript
 import { z } from 'zod'
@@ -141,12 +143,18 @@ export const storeValidator = z.object({
 
 Validator conventions:
 
+- Put validators in the file for the domain resource that owns the input, not merely the route
+  parent. A nested route may pass a parent id, but the payload still belongs to the child resource
+  when the action creates or updates that child.
+- Do not put internal service argument shapes, output schemas, DTO schemas, or composed
+  `{ params + body }` convenience schemas in `app/validators`. Keep those local to the service/tool
+  unless they are a real external input contract.
 - For `PATCH` validators, prefer optional fields or `baseSchema.partial()`. Do not carry store or
   create defaults into update schemas unless the endpoint explicitly requires them.
 - Prefer field-level `.optional()`, `.nullable()`, and `.default(...)` over object-level
   `.transform()` when the goal is simple value normalization.
 - Extract helper schemas when they improve readability, represent a meaningful domain concept, or
-  are reused. Keep schemas inline when extraction only adds indirection.
+  are reused by external input validators. Keep schemas inline when extraction only adds indirection.
 
 Common schema patterns:
 

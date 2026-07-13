@@ -29,7 +29,9 @@ Use this skill as the generic AdonisJS v6 backend context.
 
 - Keep controllers thin: validate input, resolve request context, authorize, and delegate larger
   workflows to models or services.
-- Use Zod validators in `app/validators`. Do not introduce Vine.
+- Use Zod validators in `app/validators` for external input contracts such as request bodies,
+  query strings, route params, and transport payloads. Do not use it as a generic Zod schema bucket.
+  Do not introduce Vine.
 - Use Adonis path aliases such as `#models`, `#validators`, `#lib`, `#start`, and `#config`.
 - Use route lazy imports in `start/routes.ts`.
 - Put application workflows in named services only when they represent a real domain/model

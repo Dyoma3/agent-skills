@@ -95,6 +95,13 @@ evolve safely.
 ## Validation and Schemas
 
 - Do not introduce Vine.js validators.
+- Do not treat `app/validators` as a generic place for every Zod schema. Use it for external input
+  contracts: request bodies, query strings, route params, and transport payloads.
+- Do not add composed service-input validators such as `{ ...body, routeId }` to `app/validators`
+  only because a service calls `execute(input)`. Validate the external inputs at their boundary and
+  keep internal composition local.
+- Do not place a validator in the parent resource file only because the route is nested. Choose the
+  file by the resource whose payload is being created or updated.
 - Do not accept loosely typed payloads when a Zod schema should define the contract.
 - Do not duplicate shared coercion logic for numbers, ids, or domain identifiers instead of reusing
   shared schemas.
