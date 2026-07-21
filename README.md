@@ -9,7 +9,7 @@ agent-skills/
   adonis-v6-backend/
     SKILL.md
     references/
-  nuxt-3-frontend/
+  nuxt-frontend/
     SKILL.md
     references/
 ```
